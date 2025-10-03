@@ -7,7 +7,7 @@
     "test": "tests"
   },
   "scripts": {
-    "start": "node core Application/server.js",
+    "start": "node core \\Application/server.js",
     "dev": "nodemon \"Core Application/server.js\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
