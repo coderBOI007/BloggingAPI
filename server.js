@@ -2,10 +2,10 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const connectDB = require('./ConfigFolder/database connection');
-const authRoutes = require('./Route/auth.routes.js.js');
-const blogRoutes = require('./Route/blog.routes.js.js');
-const errorHandler = require('./Middleware/error.middleware');
+const connectDB = require('./ConfigFolder/database-connection.js');
+const authRoutes = require('./Route/auth.routes.js');
+const blogRoutes = require('./Route/blog.routes.js');
+const errorHandler = require('./Middleware/error.middleware.js');
 
 const app = express();
 
