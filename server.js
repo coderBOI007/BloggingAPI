@@ -44,3 +44,21 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 module.exports = app;
+
+// Test route to check if controller files are accessible
+app.get('/test', (req, res) => {
+  try {
+    const authController = require('./controller/auth.controller.js');
+    res.json({ 
+      success: true, 
+      message: 'Controller files are accessible',
+      authController: typeof authController
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: 'Controller files not accessible',
+      error: error.message 
+    });
+  }
+});
