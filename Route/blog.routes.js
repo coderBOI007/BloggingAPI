@@ -7,9 +7,9 @@ const {
   getUserBlogs,
   updateBlog,
   deleteBlog
-} = require('./controller/blog.controller.js');
-const { protect } = require('./Middleware/auth.middleware.js');
-const { validate } = require('./Middleware/validation.middleware.js');
+} = require('../controller/blog.controller.js');
+const { protect } = require('../Middleware/auth.middleware.js');
+const { validate } = require('../Middleware/validation.middleware.js');
 
 const router = express.Router();
 
@@ -31,4 +31,3 @@ router.patch('/:id', updateBlog);
 router.delete('/:id', deleteBlog);
 
 module.exports = router;
-
