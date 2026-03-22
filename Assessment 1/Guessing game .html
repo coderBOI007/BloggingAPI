@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>GUESSR</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#07080f;--s1:#0f1018;--s2:#161825;
+  --b1:#22253a;--b2:#2e3250;
+  --ac:#6c63ff;--ach:#9b8fff;
+  --pop:#ff5e84;--gold:#fbbf24;--green:#34d399;--red:#f87171;
+  --tx:#e2e4f0;--mu:#6b7094;
+  --ff:'Syne',sans-serif;--fm:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{background:var(--bg);color:var(--tx);font-family:var(--ff);overflow:hidden;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 60% 40% at 15% 15%,rgba(108,99,255,.07),transparent 65%),
+             radial-gradient(ellipse 50% 35% at 85% 85%,rgba(255,94,132,.05),transparent 65%);}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px;}
+ 
+/* ---- SHARED ---- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;
+  border:none;border-radius:9px;font-family:var(--ff);font-weight:700;font-size:.87rem;
+  cursor:pointer;transition:all .17s;padding:.68rem 1.1rem;letter-spacing:.03em;
+  position:relative;overflow:hidden;}
+.btn::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,0);transition:.15s;}
+.btn:not(:disabled):hover::after{background:rgba(255,255,255,.08);}
+.btn:not(:disabled):active{transform:scale(.97);}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.b-ac{background:linear-gradient(135deg,var(--ac),var(--ach));color:#fff;}
+.b-pop{background:linear-gradient(135deg,var(--pop),#ff9a5c);color:#fff;}
+.b-ok{background:linear-gradient(135deg,var(--green),#059669);color:#07080f;}
+.b-gh{background:transparent;border:1px solid var(--b2);color:var(--mu);}
+.b-gh:not(:disabled):hover{border-color:var(--ac);color:var(--tx);}
+.b-sm{padding:.48rem .85rem;font-size:.79rem;border-radius:8px;}
+.b-full{width:100%;}
+ 
+input[type=text],textarea{background:var(--bg);border:1px solid var(--b1);border-radius:9px;
+  padding:.72rem 1rem;color:var(--tx);font-family:var(--fm);font-size:.87rem;
+  outline:none;transition:border-color .2s;width:100%;}
+input[type=text]:focus,textarea:focus{border-color:var(--ac);}
+input::placeholder,textarea::placeholder{color:var(--mu);}
+textarea{resize:vertical;min-height:68px;}
+.lbl{font-size:.67rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mu);
+  font-family:var(--fm);display:block;margin-bottom:.38rem;}
+ 
+.pill{display:inline-flex;align-items:center;gap:.33rem;font-size:.67rem;font-family:var(--fm);
+  font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:.26rem .62rem;border-radius:20px;}
+.p-wait{background:rgba(107,112,148,.15);color:var(--mu);border:1px solid var(--b1);}
+.p-live{background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.3);}
+.p-end{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.3);}
+.pdot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:blink 1.4s infinite;}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.5)}}
+ 
+/* ---- SCREENS ---- */
+.screen{display:none;height:100vh;position:relative;z-index:1;}
+.screen.on{display:flex;}
+ 
+/* ======= LOBBY ======= */
+#s-lobby{flex-direction:column;align-items:center;justify-content:center;padding:2rem;gap:2rem;}
+.logo{font-size:clamp(3.5rem,10vw,5.8rem);font-weight:800;letter-spacing:-.04em;line-height:1;
+  background:linear-gradient(135deg,var(--ac) 30%,var(--pop));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  animation:glow 3s ease-in-out infinite;}
+@keyframes glow{0%,100%{filter:brightness(1)}50%{filter:brightness(1.22)}}
+.logo-sub{font-family:var(--fm);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--mu);margin-top:.45rem;text-align:center;}
+ 
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:2rem;
+  width:100%;max-width:420px;display:flex;flex-direction:column;gap:1.2rem;
+  animation:up .38s ease;}
+@keyframes up{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+ 
+.tabs{display:flex;background:var(--bg);border-radius:10px;padding:3px;gap:3px;}
+.tabbtn{flex:1;padding:.53rem;background:transparent;border:none;border-radius:8px;
+  color:var(--mu);font-family:var(--ff);font-weight:700;font-size:.81rem;cursor:pointer;
+  transition:all .2s;letter-spacing:.04em;}
+.tabbtn.on{background:var(--ac);color:#fff;}
+.tabpanel{display:none;flex-direction:column;gap:.88rem;}
+.tabpanel.on{display:flex;}
+.errmsg{font-size:.77rem;font-family:var(--fm);color:var(--red);background:rgba(248,113,113,.1);
+  border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:.5rem .78rem;display:none;}
+ 
+/* ======= GAME ======= */
+#s-game{flex-direction:column;padding:1rem;gap:1rem;overflow:hidden;}
+ 
+.topbar{display:flex;align-items:center;gap:.72rem;flex-wrap:wrap;
+  background:var(--s1);border:1px solid var(--b1);border-radius:14px;
+  padding:.62rem 1rem;flex-shrink:0;}
+.tlogo{font-size:1.3rem;font-weight:800;letter-spacing:-.03em;
+  background:linear-gradient(135deg,var(--ac),var(--pop));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.codebox{display:flex;align-items:center;gap:.38rem;background:var(--bg);
+  border:1px solid var(--b1);border-radius:8px;padding:.28rem .68rem;
+  font-family:var(--fm);font-size:.74rem;color:var(--mu);}
+.codebox b{color:var(--tx);letter-spacing:.1em;}
+.copybtn{background:none;border:none;cursor:pointer;color:var(--mu);font-size:.8rem;padding:0 .18rem;transition:color .15s;}
+.copybtn:hover{color:var(--ac);}
+.sp{flex:1;}
+.pcbadge{font-family:var(--fm);font-size:.71rem;color:var(--mu);}
+ 
+.gbody{flex:1;display:grid;grid-template-columns:262px 1fr;gap:1rem;overflow:hidden;min-height:0;}
+.sidebar{display:flex;flex-direction:column;gap:.72rem;overflow-y:auto;}
+.panel{background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:.88rem 1rem;}
+.phead{font-size:.64rem;text-transform:uppercase;letter-spacing:.15em;color:var(--mu);
+  font-family:var(--fm);margin-bottom:.68rem;display:flex;align-items:center;justify-content:space-between;}
+ 
+/* player list */
+.plist{display:flex;flex-direction:column;}
+.prow{display:flex;align-items:center;gap:.48rem;padding:.4rem 0;
+  border-bottom:1px solid var(--b1);font-size:.84rem;animation:fi .28s ease;}
+@keyframes fi{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}
+.prow:last-child{border-bottom:none;}
+.pdotp{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);flex-shrink:0;}
+.pdotp.m{background:var(--gold);box-shadow:0 0 5px var(--gold);}
+.pname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pyou{font-size:.59rem;color:var(--ac);font-family:var(--fm);}
+.pscore{font-family:var(--fm);font-size:.77rem;font-weight:600;color:var(--ac);flex-shrink:0;}
+ 
+/* timer */
+.twrap{text-align:center;padding:.2rem 0;}
+.tnum{font-size:2.7rem;font-weight:800;font-family:var(--fm);line-height:1;color:var(--green);transition:color .3s;}
+.tnum.warn{color:var(--gold);}
+.tnum.urg{color:var(--red);animation:blink .5s step-end infinite;}
+.tlbl{font-size:.61rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mu);font-family:var(--fm);margin-top:.28rem;}
+.pbar{height:4px;background:var(--b1);border-radius:2px;margin-top:.72rem;overflow:hidden;}
+.pfill{height:100%;border-radius:2px;background:var(--green);transition:width 1s linear,background .3s;}
+.pfill.warn{background:var(--gold);}
+.pfill.urg{background:var(--red);}
+ 
+/* master panel */
+.mctrl{display:flex;flex-direction:column;gap:.58rem;}
+.minfo{font-size:.74rem;font-family:var(--fm);color:var(--mu);
+  background:rgba(108,99,255,.08);border:1px solid rgba(108,99,255,.2);
+  border-radius:8px;padding:.52rem .72rem;line-height:1.5;}
+.minfo b{color:var(--ac);}
+ 
+/* chat */
+.chat{display:flex;flex-direction:column;background:var(--s1);border:1px solid var(--b1);border-radius:14px;overflow:hidden;}
+.ctop{display:flex;align-items:center;gap:.72rem;padding:.68rem 1rem;
+  border-bottom:1px solid var(--b1);background:var(--s2);flex-shrink:0;flex-wrap:wrap;}
+.qlbl{font-size:.64rem;text-transform:uppercase;letter-spacing:.13em;color:var(--mu);font-family:var(--fm);}
+.qtext{font-size:.93rem;font-weight:700;flex:1;min-width:0;}
+.qtext.emp{color:var(--mu);font-weight:400;font-style:italic;}
+.attbadge{font-family:var(--fm);font-size:.74rem;color:var(--mu);background:var(--bg);
+  border:1px solid var(--b1);border-radius:8px;padding:.23rem .58rem;flex-shrink:0;}
+ 
+.msgs{flex:1;overflow-y:auto;padding:.88rem 1rem;display:flex;flex-direction:column;gap:.48rem;}
+.msg{display:flex;flex-direction:column;gap:.18rem;animation:mi .22s ease;max-width:78%;}
+@keyframes mi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.msg.sys{max-width:100%;align-self:center;}
+.msg.own{align-self:flex-end;}
+.msg.oth{align-self:flex-start;}
+.mmeta{font-size:.63rem;font-family:var(--fm);color:var(--mu);display:flex;gap:.38rem;align-items:center;}
+.msg.own .mmeta{justify-content:flex-end;}
+.mbubble{padding:.52rem .82rem;border-radius:12px;font-size:.87rem;line-height:1.5;word-break:break-word;}
+.msg.own .mbubble{background:var(--ac);color:#fff;border-bottom-right-radius:4px;}
+.msg.oth .mbubble{background:var(--s2);border:1px solid var(--b1);border-bottom-left-radius:4px;}
+.msg.sys .mbubble{background:transparent;border:1px dashed var(--b2);color:var(--mu);
+  font-family:var(--fm);font-size:.77rem;text-align:center;border-radius:8px;}
+.msg.sys.winner .mbubble{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);color:var(--gold);font-weight:600;font-size:.84rem;}
+.msg.sys.correct .mbubble{background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.3);color:var(--green);}
+.msg.sys.wrong   .mbubble{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);color:var(--red);}
+.msg.sys.reveal  .mbubble{background:rgba(108,99,255,.08);border:1px solid rgba(108,99,255,.3);color:var(--ach);}
+.msg.sys.info    .mbubble{border-style:solid;background:var(--s2);}
+ 
+.cinput-area{border-top:1px solid var(--b1);padding:.72rem 1rem;
+  display:flex;gap:.58rem;align-items:center;flex-shrink:0;background:var(--s2);}
+.cinput{flex:1;background:var(--bg);border:1px solid var(--b1);border-radius:9px;
+  padding:.62rem .88rem;color:var(--tx);font-family:var(--fm);font-size:.87rem;outline:none;transition:border-color .2s;}
+.cinput:focus{border-color:var(--ac);}
+.cinput::placeholder{color:var(--mu);}
+.cinput:disabled{opacity:.4;cursor:not-allowed;}
+.sbtn{background:linear-gradient(135deg,var(--ac),var(--ach));border:none;border-radius:9px;
+  padding:.62rem .92rem;cursor:pointer;color:#fff;font-size:.95rem;transition:all .17s;flex-shrink:0;}
+.sbtn:disabled{opacity:.3;cursor:not-allowed;}
+.sbtn:not(:disabled):hover{filter:brightness(1.14);}
+.sbtn:not(:disabled):active{transform:scale(.95);}
+ 
+/* result overlay */
+#overlay{display:none;position:fixed;inset:0;background:rgba(7,8,15,.88);
+  backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center;}
+#overlay.on{display:flex;}
+.rcard{background:var(--s1);border:1px solid var(--b2);border-radius:20px;
+  padding:2rem 2.4rem;max-width:500px;width:92%;max-height:88vh;overflow-y:auto;
+  display:flex;flex-direction:column;gap:.95rem;animation:popin .33s cubic-bezier(.34,1.56,.64,1);}
+@keyframes popin{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:scale(1)}}
+.rico{font-size:3rem;text-align:center;line-height:1;}
+.rtitle{font-size:1.45rem;font-weight:800;letter-spacing:-.02em;text-align:center;}
+.rtitle.win{color:var(--gold);}
+.rtitle.lose{color:var(--mu);}
+.rtitle.youwin{color:var(--green);}
+.rbody{font-size:.87rem;color:var(--mu);line-height:1.6;text-align:center;}
+.rbody b{color:var(--tx);}
+.rans{background:var(--bg);border:1px solid var(--ac);border-radius:10px;
+  padding:.68rem 1.1rem;font-family:var(--fm);font-size:.98rem;color:var(--ach);
+  font-weight:600;text-align:center;}
+.rnext{font-family:var(--fm);font-size:.74rem;color:var(--mu);
+  background:var(--s2);border-radius:8px;padding:.58rem;text-align:center;}
+.rnext b{color:var(--tx);}
+.srow{display:flex;align-items:center;gap:.48rem;padding:.33rem 0;border-bottom:1px solid var(--b1);font-size:.84rem;}
+.srow:last-child{border-bottom:none;}
+.srank{font-family:var(--fm);color:var(--mu);font-size:.7rem;width:1.1rem;}
+.sname{flex:1;}
+.spts{font-family:var(--fm);color:var(--ac);font-weight:600;}
+.youtag{font-size:.63rem;color:var(--ac);font-family:var(--fm);}
+ 
+/* setup notice */
+#setup-notice{display:none;position:fixed;inset:0;z-index:9999;background:rgba(7,8,15,.97);
+  color:var(--tx);font-family:var(--fm);font-size:.81rem;flex-direction:column;
+  align-items:center;justify-content:center;padding:2rem;gap:1.4rem;line-height:1.7;text-align:center;}
+#setup-notice a{color:var(--ach);}
+.sn-box{max-width:580px;background:var(--s1);border:1px solid var(--b1);border-radius:14px;
+  padding:1.5rem;display:flex;flex-direction:column;gap:.9rem;text-align:left;}
+.sn-tip{background:var(--bg);border:1px solid var(--b2);border-radius:8px;padding:.85rem;
+  color:var(--ac);font-size:.77rem;line-height:1.65;}
+ 
+@media(max-width:700px){
+  .gbody{grid-template-columns:1fr;grid-template-rows:auto 1fr;}
+  .sidebar{flex-direction:row;overflow-x:auto;overflow-y:visible;}
+  .sidebar .panel{flex-shrink:0;min-width:215px;}
+  body,html{overflow:auto;}
+  .screen{overflow:auto;height:auto;min-height:100vh;}
+  #s-game{overflow:auto;}
+}
+</style>
+</head>
+<body>
+ 
+<!-- LOBBY -->
+<div id="s-lobby" class="screen on">
+  <div style="text-align:center">
+    <div class="logo">GUESSR</div>
+    <div class="logo-sub">Live Multiplayer Guessing Game</div>
+  </div>
+  <div class="card">
+    <div class="tabs">
+      <button class="tabbtn on" onclick="switchTab('create')">Create Session</button>
+      <button class="tabbtn"    onclick="switchTab('join')">Join Session</button>
+    </div>
+    <div id="tab-create" class="tabpanel on">
+      <div><span class="lbl">Your Name</span>
+        <input type="text" id="cname" placeholder="Enter your name…" maxlength="20"/></div>
+      <div id="err-c" class="errmsg"></div>
+      <button class="btn b-ac b-full" onclick="createSession()">🎮 Create Game Session</button>
+    </div>
+    <div id="tab-join" class="tabpanel">
+      <div><span class="lbl">Your Name</span>
+        <input type="text" id="jname" placeholder="Enter your name…" maxlength="20"/></div>
+      <div><span class="lbl">Session Code</span>
+        <input type="text" id="jcode" placeholder="e.g. AB3X9Z" maxlength="6"
+          oninput="this.value=this.value.toUpperCase()"/></div>
+      <div id="err-j" class="errmsg"></div>
+      <button class="btn b-pop b-full" onclick="joinSession()">🚀 Join Session</button>
+    </div>
+  </div>
+</div>
+ 
+<!-- GAME -->
+<div id="s-game" class="screen">
+  <div class="topbar">
+    <span class="tlogo">GUESSR</span>
+    <div class="codebox">CODE:&nbsp;<b id="tb-code">——</b>
+      <button class="copybtn" onclick="copyCode()">⧉</button></div>
+    <span id="tb-status" class="pill p-wait"><span class="pdot"></span>Waiting</span>
+    <span class="sp"></span>
+    <span class="pcbadge" id="tb-pc">0 players</span>
+    <button class="btn b-gh b-sm" onclick="leaveSession()">Leave</button>
+  </div>
+ 
+  <div class="gbody">
+    <div class="sidebar">
+      <div class="panel">
+        <div class="phead"><span>Players</span><span id="p-cnt">0</span></div>
+        <div class="plist" id="plist"></div>
+      </div>
+      <div class="panel" id="timer-panel" style="display:none">
+        <div class="phead">Time Remaining</div>
+        <div class="twrap">
+          <div class="tnum" id="tnum">60</div>
+          <div class="tlbl">seconds</div>
+          <div class="pbar"><div class="pfill" id="pfill" style="width:100%"></div></div>
+        </div>
+      </div>
+      <div class="panel" id="master-panel" style="display:none">
+        <div class="phead">Game Master Controls</div>
+        <div class="mctrl" id="mctrl"></div>
+      </div>
+    </div>
+ 
+    <div class="chat">
+      <div class="ctop">
+        <div style="display:flex;flex-direction:column;gap:.18rem;flex:1;min-width:0">
+          <span class="qlbl">Current Question</span>
+          <span class="qtext emp" id="qdisplay">No question yet…</span>
+        </div>
+        <span class="attbadge" id="attbadge" style="display:none">3 attempts left</span>
+      </div>
+      <div class="msgs" id="msgs"></div>
+      <div class="cinput-area">
+        <input type="text" class="cinput" id="cinput"
+          placeholder="Game hasn't started yet…" maxlength="120"
+          onkeydown="if(event.key==='Enter')sendGuess()" disabled/>
+        <button class="sbtn" id="sbtn" onclick="sendGuess()" disabled>➤</button>
+      </div>
+    </div>
+  </div>
+</div>
+ 
+<!-- RESULT OVERLAY -->
+<div id="overlay">
+  <div class="rcard" id="rcard"></div>
+</div>
+ 
+<!-- SETUP NOTICE -->
+<div id="setup-notice">
+  <div style="font-size:2.4rem">🔧</div>
+  <div style="font-size:1.15rem;font-weight:700;font-family:'Syne',sans-serif">Firebase Setup Required</div>
+  <div class="sn-box">
+    <p>This game needs <b>Firebase Realtime Database</b> for live multiplayer. It's free and takes ~3 mins:</p>
+    <ol style="padding-left:1.2rem;display:flex;flex-direction:column;gap:.45rem;">
+      <li>Go to <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> → Create a project</li>
+      <li>Add a <b>Web App</b> → copy the <code>firebaseConfig</code> object</li>
+      <li>Left menu → <b>Build → Realtime Database</b> → Create database → <b>Test mode</b></li>
+      <li>Open this HTML file in a text editor, find <code>FIREBASE_CONFIG</code> near the top of the &lt;script&gt; and replace it with your config</li>
+      <li>Save &amp; open in any browser. Share the file with friends — they open it and join with your code!</li>
+    </ol>
+    <div class="sn-tip">
+      ✦ Entire game is one self-contained HTML file — no server, no install.<br>
+      ✦ Firebase free tier supports 100 concurrent connections (plenty for friends).<br>
+      ✦ For public use, set Realtime Database security rules to restrict access.
+    </div>
+  </div>
+</div>
+ 
+<script>
+/* ═══════════════════════════════════════════════
+   FIREBASE CONFIG  ← replace with yours
+   console.firebase.google.com
+═══════════════════════════════════════════════ */
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyB5LUHAgns_-NtqFoQKQg38_pspP1jqIQ4",
+  authDomain:        "guess-what-441a6.firebaseapp.com",
+  databaseURL:       "https://guess-what-441a6-default-rtdb.firebaseio.com",
+  projectId:         "guess-what-441a6",
+  storageBucket:     "guess-what-441a6.firebasestorage.app",
+  messagingSenderId: "28517768454",
+  appId:             "1:28517768454:web:12dda896ce667ab518d287"
+};
+ 
+const GAME_SECS = 60;
+ 
+/* ── init ── */
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+ 
+/* ── state ── */
+let myId, myName, code, isMaster;
+let session = null;
+let timerEnd = null, timerIv = null;
+let gameOver = false;
+let lastStatus = null, lastWinner = null;
+ 
+/* ── utils ── */
+const $ = id => document.getElementById(id);
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const uid = () => Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
+const genCode = () => { const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=c[Math.random()*c.length|0]; return s; };
+const ts = () => Date.now();
+const showErr = (id,msg) => { const e=$(id); e.textContent=msg; e.style.display='block'; setTimeout(()=>e.style.display='none',4000); };
+const showScreen = n => { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on')); $('s-'+n).classList.add('on'); };
+ 
+function switchTab(t){
+  document.querySelectorAll('.tabbtn').forEach((b,i)=>b.classList.toggle('on',(i===0&&t==='create')||(i===1&&t==='join')));
+  $('tab-create').classList.toggle('on',t==='create');
+  $('tab-join').classList.toggle('on',t==='join');
+}
+function copyCode(){ navigator.clipboard?.writeText(code); const b=document.querySelector('.copybtn'); b.textContent='✓'; setTimeout(()=>b.textContent='⧉',1500); }
+ 
+/* ═══════════════════════════════════════════════
+   CREATE SESSION
+═══════════════════════════════════════════════ */
+async function createSession(){
+  const name=$('cname').value.trim();
+  if(!name) return showErr('err-c','Enter your name');
+  myId=uid(); myName=name; isMaster=true; code=genCode();
+  const ref=db.ref('sessions/'+code);
+  await ref.set({ code, status:'waiting', masterId:myId, question:'', answer:'',
+    startedAt:null, endedAt:null, winnerId:null, winnerName:null, createdAt:ts() });
+  await ref.child('players/'+myId).set({ id:myId, name:myName, score:0, isMaster:true, attempts:3, joinedAt:ts() });
+  ref.child('players/'+myId).onDisconnect().remove();
+  enterGame();
+}
+ 
+/* ═══════════════════════════════════════════════
+   JOIN SESSION
+═══════════════════════════════════════════════ */
+async function joinSession(){
+  const name=$('jname').value.trim(), c=$('jcode').value.trim().toUpperCase();
+  if(!name) return showErr('err-j','Enter your name');
+  if(!c)    return showErr('err-j','Enter a session code');
+  const snap=await db.ref('sessions/'+c).get();
+  if(!snap.exists()) return showErr('err-j','Session not found');
+  const s=snap.val();
+  if(s.status==='playing') return showErr('err-j','Game already in progress');
+  if(s.status==='ended')   return showErr('err-j','Session has ended');
+  myId=uid(); myName=name; isMaster=false; code=c;
+  const ref=db.ref('sessions/'+code+'/players/'+myId);
+  await ref.set({ id:myId, name:myName, score:0, isMaster:false, attempts:3, joinedAt:ts() });
+  ref.onDisconnect().remove();
+  enterGame();
+}
+ 
+/* ═══════════════════════════════════════════════
+   ENTER GAME
+═══════════════════════════════════════════════ */
+function enterGame(){
+  showScreen('game');
+  $('tb-code').textContent=code;
+  db.ref('sessions/'+code).on('value', snap=>{
+    if(!snap.exists()){ leaveCleanup(); showScreen('lobby'); return; }
+    session=snap.val();
+    render();
+    checkEndConditions();
+  });
+  db.ref('sessions/'+code+'/messages').on('child_added', snap=>appendMsg(snap.val()));
+  sysMsg('👋 '+myName+' joined the session','info');
+}
+ 
+/* ═══════════════════════════════════════════════
+   RENDER
+═══════════════════════════════════════════════ */
+function render(){
+  if(!session) return;
+  const S=session;
+  const players=Object.values(S.players||{});
+  isMaster=(S.masterId===myId);
+ 
+  /* topbar status */
+  const st=$('tb-status');
+  if(S.status==='waiting'){ st.className='pill p-wait'; st.innerHTML='<span class="pdot"></span>Waiting'; }
+  else if(S.status==='playing'){ st.className='pill p-live'; st.innerHTML='<span class="pdot"></span>Live'; }
+  else{ st.className='pill p-end'; st.innerHTML='<span class="pdot"></span>Ended'; }
+ 
+  const pc=players.length;
+  $('tb-pc').textContent=pc+' player'+(pc!==1?'s':'');
+  $('p-cnt').textContent=pc;
+ 
+  /* player list */
+  renderPlayers(players, S);
+ 
+  /* question */
+  const qd=$('qdisplay');
+  if(S.question){ qd.textContent=S.question; qd.classList.remove('emp'); }
+  else{ qd.textContent='No question yet…'; qd.classList.add('emp'); }
+ 
+  /* attempts badge */
+  const me=S.players?.[myId];
+  if(S.status==='playing'&&!isMaster&&me){
+    const a=me.attempts??3;
+    $('attbadge').style.display=''; $('attbadge').textContent=a+' attempt'+(a!==1?'s':'')+' left';
+  } else { $('attbadge').style.display='none'; }
+ 
+  /* timer */
+  if(S.status==='playing'&&S.startedAt){ $('timer-panel').style.display=''; startTimer(S.startedAt); }
+  else{ $('timer-panel').style.display='none'; stopTimer(); }
+ 
+  /* master panel */
+  if(isMaster){ $('master-panel').style.display=''; renderMaster(S, players); }
+  else { $('master-panel').style.display='none'; }
+ 
+  /* chat input */
+  const canGuess=S.status==='playing'&&!isMaster&&!S.winnerId&&!gameOver&&me&&(me.attempts??0)>0;
+  $('cinput').disabled=!canGuess; $('sbtn').disabled=!canGuess;
+  $('cinput').placeholder=canGuess?'Type your guess…':
+    isMaster?'You are the Game Master…':
+    S.status==='waiting'?'Game hasn\'t started yet…':
+    S.winnerId?'Game over — someone won!':
+    (me&&(me.attempts??0)<=0)?'No attempts remaining':'Waiting…';
+}
+ 
+function renderPlayers(players, S){
+  players.sort((a,b)=>b.score-a.score);
+  $('plist').innerHTML=players.map(p=>`
+    <div class="prow">
+      <span class="pdotp${p.id===S.masterId?' m':''}"></span>
+      <span class="pname">${esc(p.name)}${p.id===myId?' <span class="pyou">(you)</span>':''}</span>
+      ${p.id===S.masterId?'<span style="font-size:.72rem">👑</span>':''}
+      <span class="pscore">${p.score}pts</span>
+    </div>`).join('');
+}
+ 
+function renderMaster(S, players){
+  const mc=$('mctrl'); mc.innerHTML='';
+  if(S.status==='waiting'){
+    const ok=players.length>=3&&S.question&&S.answer;
+    mc.innerHTML=`
+      <div class="minfo"><b>You are the Game Master.</b><br>Set a question &amp; answer, then start.<br>Need <b>≥ 3 players</b> total.</div>
+      <span class="lbl">Question</span>
+      <textarea id="mc-q" rows="2" placeholder="What is the capital of Nigeria?">${esc(S.question||'')}</textarea>
+      <span class="lbl">Answer</span>
+      <input type="text" id="mc-a" placeholder="Abuja" value="${esc(S.answer||'')}"/>
+      <button class="btn b-ok b-sm" onclick="saveQ()">Save Question</button>
+      <button class="btn b-ac b-sm" onclick="startGame()" ${ok?'':'disabled'}>${players.length<3?'Need ≥3 players':'🚀 Start Game!'}</button>`;
+  } else if(S.status==='playing'){
+    mc.innerHTML=`<div class="minfo">Game in progress.<br><b>Answer:</b> ${esc(S.answer)}</div>`;
+  } else {
+    mc.innerHTML=`
+      <div class="minfo"><b>Round over!</b> Set a new question to play again.</div>
+      <span class="lbl">New Question</span>
+      <textarea id="mc-q" rows="2" placeholder="Next question…"></textarea>
+      <span class="lbl">New Answer</span>
+      <input type="text" id="mc-a" placeholder="Answer…"/>
+      <button class="btn b-ok b-sm" onclick="saveQ()">Save Question</button>
+      <button class="btn b-ac b-sm" onclick="newRound()">▶ Start New Round</button>`;
+  }
+}
+ 
+/* ═══════════════════════════════════════════════
+   MASTER ACTIONS
+═══════════════════════════════════════════════ */
+async function saveQ(){
+  const q=($('mc-q')||{}).value?.trim(), a=($('mc-a')||{}).value?.trim();
+  if(!q||!a) return alert('Fill in both question and answer.');
+  await db.ref('sessions/'+code).update({question:q,answer:a});
+  sysMsg('📝 Game Master updated the question','info');
+}
+ 
+async function startGame(){
+  const S=session;
+  if(!S.question||!S.answer) return alert('Set a question and answer first.');
+  const players=Object.values(S.players||{});
+  if(players.length<3) return alert('Need at least 3 players to start.');
+  gameOver=false; lastWinner=null; lastStatus=null;
+  const upd={'status':'playing','startedAt':ts(),'endedAt':null,'winnerId':null,'winnerName':null};
+  players.forEach(p=>{ upd['players/'+p.id+'/attempts']=3; });
+  await db.ref('sessions/'+code).update(upd);
+  sysMsg('🎮 Game started! '+GAME_SECS+' seconds on the clock…','info');
+}
+ 
+async function newRound(){
+  const q=($('mc-q')||{}).value?.trim(), a=($('mc-a')||{}).value?.trim();
+  if(!q||!a) return alert('Set a question and answer first.');
+  const players=Object.values(session.players||{});
+  gameOver=false; lastWinner=null; lastStatus=null;
+  hideOverlay();
+  const upd={'status':'playing','question':q,'answer':a,'startedAt':ts(),
+    'endedAt':null,'winnerId':null,'winnerName':null};
+  players.forEach(p=>{ upd['players/'+p.id+'/attempts']=3; });
+  await db.ref('sessions/'+code).update(upd);
+  await db.ref('sessions/'+code+'/messages').remove();
+  sysMsg('🎮 New round started!','info');
+}
+ 
+/* ═══════════════════════════════════════════════
+   TIMER
+═══════════════════════════════════════════════ */
+function startTimer(startedAt){
+  const end=startedAt+GAME_SECS*1000;
+  if(timerEnd===end) return;
+  timerEnd=end; stopTimer();
+  timerIv=setInterval(()=>{
+    const rem=Math.max(0,Math.ceil((timerEnd-Date.now())/1000));
+    drawTimer(rem);
+    if(rem<=0){ stopTimer(); onTimerExpired(); }
+  },500);
+  drawTimer(Math.max(0,Math.ceil((timerEnd-Date.now())/1000)));
+}
+function stopTimer(){ if(timerIv){ clearInterval(timerIv); timerIv=null; } timerEnd=null; }
+function drawTimer(s){
+  $('tnum').textContent=s;
+  $('pfill').style.width=(s/GAME_SECS*100)+'%';
+  $('tnum').className='tnum'+(s<=10?' urg':s<=20?' warn':'');
+  $('pfill').className='pfill'+(s<=10?' urg':s<=20?' warn':'');
+}
+async function onTimerExpired(){
+  if(!session||session.status!=='playing'||session.winnerId||gameOver) return;
+  gameOver=true;
+  if(isMaster) await db.ref('sessions/'+code).update({status:'ended',endedAt:ts()});
+  showOverlay({expired:true});
+  sysMsg('⏰ Time\'s up! The answer was: '+session.answer,'reveal');
+}
+ 
+/* ═══════════════════════════════════════════════
+   CHECK END CONDITIONS (from other clients)
+═══════════════════════════════════════════════ */
+function checkEndConditions(){
+  if(!session) return;
+  const S=session;
+  /* someone else won */
+  if(S.winnerId&&S.winnerId!==myId&&lastWinner!==S.winnerId){
+    lastWinner=S.winnerId; gameOver=true; stopTimer();
+    showOverlay({won:true,name:S.winnerName,answer:S.answer,isMe:false});
+  }
+  /* expired (no winner, status=ended) */
+  if(S.status==='ended'&&!S.winnerId&&lastStatus!=='ended'){
+    lastStatus='ended'; gameOver=true; stopTimer();
+    if(!$('overlay').classList.contains('on')) showOverlay({expired:true});
+  }
+  /* new round reset */
+  if(S.status==='playing'&&(lastStatus==='ended'||lastStatus===null)){
+    if(lastStatus==='ended'){ gameOver=false; lastWinner=null; hideOverlay(); }
+    lastStatus='playing';
+  }
+  if(S.status==='waiting') lastStatus='waiting';
+  if(S.status==='playing'&&!lastStatus) lastStatus='playing';
+}
+ 
+/* ═══════════════════════════════════════════════
+   GUESSING
+═══════════════════════════════════════════════ */
+async function sendGuess(){
+  const inp=$('cinput'), guess=inp.value.trim();
+  if(!guess||!session||session.status!=='playing'||isMaster||gameOver) return;
+  if(session.winnerId) return;
+  const me=session.players?.[myId];
+  if(!me||(me.attempts??0)<=0) return;
+  inp.value='';
+ 
+  /* post guess message */
+  const ref=db.ref('sessions/'+code+'/messages').push();
+  await ref.set({id:ref.key,senderId:myId,senderName:myName,text:guess,type:'guess',ts:ts()});
+ 
+  const correct=guess.trim().toLowerCase()===session.answer.trim().toLowerCase();
+  if(correct){
+    gameOver=true;
+    await db.ref('sessions/'+code).update({winnerId:myId,winnerName:myName,status:'ended',endedAt:ts()});
+    await db.ref('sessions/'+code+'/players/'+myId+'/score').transaction(v=>(v||0)+10);
+    stopTimer();
+    sysMsg('🏆 '+myName+' got it right! Answer: '+session.answer,'winner');
+    showOverlay({won:true,name:myName,answer:session.answer,isMe:true});
+  } else {
+    const na=Math.max(0,(me.attempts??3)-1);
+    await db.ref('sessions/'+code+'/players/'+myId+'/attempts').set(na);
+    sysMsg('❌ '+myName+': "'+guess+'" — wrong! '+(na>0?na+' attempt'+(na!==1?'s':'')+' left':'No attempts remaining'),'wrong');
+  }
+}
+ 
+/* ═══════════════════════════════════════════════
+   OVERLAY
+═══════════════════════════════════════════════ */
+function showOverlay({won,name,answer,isMe,expired}){
+  const S=session||{};
+  const players=Object.values(S.players||{}).sort((a,b)=>b.score-a.score);
+  const nextMaster=players.find(p=>p.id!==S.masterId)||players[0];
+  const iAmNext=nextMaster&&nextMaster.id===myId;
+ 
+  let h='';
+  if(expired){
+    h=`<div class="rico">⏰</div>
+      <div class="rtitle lose">Time's Up!</div>
+      <div class="rbody">Nobody guessed correctly — no points this round.</div>
+      <div><span class="lbl">The Answer Was</span><div class="rans">${esc(S.answer)}</div></div>
+      ${iAmNext?`<div class="rnext">🎮 You become the next <b>Game Master</b>!</div>
+      <button class="btn b-ac b-full" onclick="takeMaster()">Become Game Master</button>`
+      :`<div class="rnext">Next Game Master: <b>${esc(nextMaster?.name||'')}</b></div>`}`;
+  } else if(won&&isMe){
+    h=`<div class="rico">🏆</div>
+      <div class="rtitle youwin">You Won! +10 pts</div>
+      <div class="rbody">You guessed the answer correctly!</div>
+      <div><span class="lbl">The Answer Was</span><div class="rans">${esc(answer)}</div></div>`;
+  } else if(won&&!isMe){
+    h=`<div class="rico">🎉</div>
+      <div class="rtitle win">${esc(name)} Won!</div>
+      <div class="rbody">They guessed correctly and earn <b>10 points</b>.</div>
+      <div><span class="lbl">The Answer Was</span><div class="rans">${esc(answer)}</div></div>
+      ${iAmNext?`<div class="rnext">🎮 You become the next <b>Game Master</b>!</div>
+      <button class="btn b-ac b-full" onclick="takeMaster()">Become Game Master</button>`
+      :`<div class="rnext">Next Game Master: <b>${esc(nextMaster?.name||'')}</b></div>`}`;
+  }
+ 
+  if(players.length){
+    h+=`<div><span class="lbl" style="margin-bottom:.45rem">Scoreboard</span>
+      ${players.map((p,i)=>`<div class="srow">
+        <span class="srank">${i+1}</span>
+        <span class="sname">${esc(p.name)}${p.id===myId?' <span class="youtag">(you)</span>':''}</span>
+        <span class="spts">${p.score} pts</span>
+      </div>`).join('')}</div>`;
+  }
+ 
+  $('rcard').innerHTML=h;
+  $('overlay').classList.add('on');
+}
+function hideOverlay(){ $('overlay').classList.remove('on'); }
+ 
+async function takeMaster(){
+  if(!session) return;
+  const players=Object.values(session.players||{});
+  const upd={masterId:myId,status:'waiting',question:'',answer:'',winnerId:null,winnerName:null};
+  players.forEach(p=>upd['players/'+p.id+'/attempts']=3);
+  await db.ref('sessions/'+code).update(upd);
+  isMaster=true; gameOver=false; lastStatus='waiting'; lastWinner=null;
+  hideOverlay();
+  await db.ref('sessions/'+code+'/messages').remove();
+  sysMsg('👑 '+myName+' is now the Game Master','info');
+}
+ 
+/* ═══════════════════════════════════════════════
+   MESSAGES
+═══════════════════════════════════════════════ */
+async function sysMsg(text,flavor){
+  const ref=db.ref('sessions/'+code+'/messages').push();
+  await ref.set({id:ref.key,senderId:'system',senderName:'System',text,type:'system',flavor,ts:ts()});
+}
+ 
+const seenMsgs=new Set();
+function appendMsg(msg){
+  if(seenMsgs.has(msg.id)) return;
+  seenMsgs.add(msg.id);
+  const c=$('msgs');
+  const d=document.createElement('div');
+  d.id='m-'+msg.id;
+  const ago=()=>{ const s=Math.floor((Date.now()-msg.ts)/1000); return s<5?'just now':s<60?s+'s ago':Math.floor(s/60)+'m ago'; };
+  if(msg.type==='system'){
+    d.className='msg sys '+(msg.flavor||'');
+    d.innerHTML=`<div class="mbubble">${esc(msg.text)}</div>`;
+  } else {
+    const own=msg.senderId===myId;
+    d.className='msg '+(own?'own':'oth');
+    d.innerHTML=`<div class="mmeta">${esc(msg.senderName)} · ${ago()}</div><div class="mbubble">${esc(msg.text)}</div>`;
+  }
+  c.appendChild(d);
+  c.scrollTop=c.scrollHeight;
+}
+ 
+/* ═══════════════════════════════════════════════
+   LEAVE
+═══════════════════════════════════════════════ */
+async function leaveSession(){
+  if(!code) return;
+  await db.ref('sessions/'+code+'/players/'+myId).remove();
+  const snap=await db.ref('sessions/'+code+'/players').get();
+  const rem=snap.exists()?Object.keys(snap.val()):[];
+  if(!rem.length){
+    await db.ref('sessions/'+code).remove();
+  } else if(isMaster){
+    const upd={masterId:rem[0],status:'waiting',question:'',answer:''};
+    rem.forEach(id=>upd['players/'+id+'/attempts']=3);
+    await db.ref('sessions/'+code).update(upd);
+  }
+  leaveCleanup(); showScreen('lobby');
+}
+function leaveCleanup(){
+  if(code){ db.ref('sessions/'+code).off(); db.ref('sessions/'+code+'/messages').off(); }
+  stopTimer();
+  myId=myName=code=null; isMaster=false; session=null;
+  timerEnd=null; gameOver=false; lastStatus=null; lastWinner=null;
+  $('msgs').innerHTML=''; $('plist').innerHTML=''; seenMsgs.clear(); hideOverlay();
+}
+ 
+/* ── show setup notice if not configured ── */
+setTimeout(()=>{
+  if(FIREBASE_CONFIG.apiKey==='YOUR_API_KEY'){
+    $('setup-notice').style.display='flex';
+    $('s-lobby').classList.remove('on');
+  }
+},200);
+</script>
+</body>
+</html>
